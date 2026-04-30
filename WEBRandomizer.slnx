@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/randomizer/">
+    <Project Path="randomizer/RandomizerCore/RandomizerCore.csproj" />
+  </Folder>
+  <Folder Name="/randomizer/Vendor/" />
+  <Folder Name="/randomizer/Vendor/ColorzCore/">
+    <Project Path="randomizer/Vendor/ColorzCore/ColorzCore/ColorzCore.csproj" />
+  </Folder>
+  <Project Path="WebRandomizer/WebRandomizer.csproj" />
+</Solution>

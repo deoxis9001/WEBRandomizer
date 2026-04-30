@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minish Cap Randomizer</title>
+  <style>
+    :root {
+      --bg: #0e1117;
+      --surface: #1a1f2e;
+      --surface2: #242938;
+      --border: #2e3450;
+      --gold: #c9a227;
+      --gold-light: #e8c14a;
+      --green: #3a7d44;
+      --green-light: #4caf58;
+      --text: #e8e8e8;
+      --text-muted: #8a8fa8;
+      --error: #e05252;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #0e1117 0%, #1a2240 100%);
+      border-bottom: 2px solid var(--gold);
+      padding: 1rem 2rem;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 1.6rem; color: var(--gold); letter-spacing: 2px; text-transform: uppercase; }
+    header p  { color: var(--text-muted); margin-top: .2rem; font-size: .85rem; }
+
+    /* ── Main tab bar ── */
+    .main-tabs-bar {
+      background: var(--surface);
+      border-bottom: 2px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      padding: 0 1rem;
+      flex-shrink: 0;
+    }
+
+    .main-tab {
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      border-radius: 0;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: .85rem;
+      font-weight: 600;
+      padding: .65rem 1rem;
+      transition: color .15s, border-color .15s;
+      margin-bottom: -2px;
+    }
+    .main-tab:hover { color: var(--text); filter: none; }
+    .main-tab.active { border-bottom-color: var(--gold); color: var(--gold); }
+    .main-tab.special { color: var(--gold-light); }
+    .main-tab.special.active { border-bottom-color: var(--gold-light); color: var(--gold-light); }
+
+    /* ── Tab panes ── */
+    .main-tab-panes { flex: 1; overflow: auto; }
+    .main-tab-pane   { display: none; padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+    .main-tab-pane.active { display: block; }
+
+    /* ── Common card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 {
+      font-size: .9rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--gold);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: .5rem;
+      margin-bottom: 1rem;
+    }
+
+    /* ── General tab layout ── */
+    .general-grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    @media (max-width: 800px) { .general-grid { grid-template-columns: 1fr; } }
+
+    .setup-panel { display: flex; flex-direction: column; gap: 1rem; }
+
+    .preset-row { display: flex; gap: .5rem; align-items: center; }
+    .preset-row select { flex: 1; min-width: 0; }
+    .preset-row button { white-space: nowrap; flex-shrink: 0; }
+
+    .field label {
+      display: block;
+      font-size: .78rem;
+      color: var(--text-muted);
+      margin-bottom: .3rem;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .field input[type="text"],
+    .field input[type="file"],
+    .field textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: .5rem .75rem;
+      font-size: .9rem;
+    }
+    .field input:focus, .field textarea:focus { outline: none; border-color: var(--gold); }
+    .field input[type="file"] { cursor: pointer; }
+
+    .seed-row { display: flex; gap: .5rem; }
+    .seed-row input { flex: 1; }
+
+    .setting-string-area {
+      font-family: monospace;
+      font-size: .8rem;
+      resize: vertical;
+      min-height: 56px;
+    }
+
+    button {
+      border: none; border-radius: 4px; cursor: pointer;
+      font-size: .9rem; font-weight: 600; padding: .5rem 1rem;
+      transition: filter .15s;
+    }
+    button:hover  { filter: brightness(1.15); }
+    button:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+
+    .btn-secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); }
+    .btn-primary   { background: var(--gold); color: #0e1117; width: 100%; padding: .75rem; font-size: 1rem; }
+    .btn-download  { background: var(--green); color: #fff; display: flex; align-items: center; gap: .5rem; }
+
+    /* Spinner & error */
+    .spinner { display: none; align-items: center; gap: .75rem; color: var(--text-muted); font-size: .9rem; }
+    .spinner.visible { display: flex; }
+    .spin { width: 20px; height: 20px; border: 3px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg { background: rgba(224,82,82,.15); border: 1px solid var(--error); border-radius: 4px; color: var(--error); display: none; font-size: .875rem; padding: .6rem .75rem; }
+    .error-msg.visible { display: block; }
+
+    /* Result panel */
+    .result-panel { display: none; }
+    .result-panel.visible { display: block; }
+
+    .hash-canvas-wrap { display: flex; justify-content: center; margin: .75rem 0 .25rem; }
+    #hashCanvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+    .result-info { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-bottom: 1rem; }
+    .info-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: .6rem .75rem; }
+    .info-box .label { color: var(--text-muted); font-size: .75rem; text-transform: uppercase; }
+    .info-box .value { font-family: monospace; font-size: .9rem; word-break: break-all; margin-top: .2rem; }
+    .download-row { display: flex; flex-wrap: wrap; gap: .75rem; }
+
+    /* ── Options sub-tabs (inside each logic tab pane) ── */
+    .sub-tabs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+    .sub-tab {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 4px;
+      color: var(--text-muted); cursor: pointer; font-size: .8rem; padding: .3rem .75rem;
+    }
+    .sub-tab.active { background: var(--gold); border-color: var(--gold); color: #0e1117; font-weight: 700; }
+    .sub-tab-content { display: none; }
+    .sub-tab-content.active { display: block; }
+
+    /* ── Option groups ── */
+    .option-group {
+      margin-bottom: 1rem;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 1px;
+    }
+    .option-group-title {
+      grid-column: 1 / -1;
+      background: var(--border);
+      color: var(--gold-light);
+      font-size: .75rem; font-weight: 700; letter-spacing: .5px;
+      padding: .4rem .75rem;
+      text-transform: uppercase;
+    }
+    .option-item {
+      display: flex; align-items: center; gap: .75rem;
+      padding: .5rem .75rem; position: relative;
+      background: var(--surface2);
+    }
+    .option-item.type-flag        { grid-column: span 2; }
+    .option-item.type-dropdown    { grid-column: span 3; }
+    .option-item.type-numberbox   { grid-column: span 3; }
+    .option-item.type-colorpicker { grid-column: span 3; }
+
+    .option-item label { flex: 1; font-size: .85rem; cursor: pointer; }
+    .option-item input[type="checkbox"] { accent-color: var(--green-light); width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
+    .option-item select,
+    .option-item input[type="number"],
+    .option-item input[type="color"] {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+      color: var(--text); font-size: .85rem; padding: .2rem .4rem;
+    }
+    .option-item select { max-width: 160px; }
+    .option-item input[type="number"] { width: 70px; }
+    .option-item input[type="color"] { width: 40px; height: 28px; padding: 2px; cursor: pointer; }
+
+    .tooltip-icon { color: var(--text-muted); cursor: help; font-size: .8rem; flex-shrink: 0; }
+    .tooltip-icon:hover::after {
+      content: attr(data-tip); position: absolute; right: 0; top: 100%;
+      background: #111; border: 1px solid var(--border); border-radius: 4px;
+      color: var(--text); font-size: .8rem; max-width: 260px; padding: .5rem;
+      white-space: pre-wrap; z-index: 10;
+    }
+
+    /* ── Advanced tab ── */
+    .adv-field { display: flex; align-items: center; gap: 1rem; margin-bottom: .5rem; }
+    .adv-field label { color: var(--text-muted); font-size: .85rem; min-width: 220px; }
+    .adv-field input[type="number"] {
+      width: 80px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; color: var(--text); padding: .4rem .6rem; font-size: .9rem;
+    }
+    .adv-toggle-row { display: flex; align-items: center; gap: .6rem; }
+    .adv-toggle-row input[type="checkbox"] { accent-color: var(--green-light); width: 15px; height: 15px; cursor: pointer; }
+    .adv-toggle-row label { font-size: .9rem; cursor: pointer; }
+    .adv-file-row {
+      display: flex; align-items: center; gap: 1rem;
+      margin: .4rem 0 0 1.5rem; padding: .4rem .75rem;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 4px;
+    }
+    .adv-file-row label { color: var(--text-muted); font-size: .8rem; min-width: 160px; }
+    .adv-file-row input[type="file"] {
+      background: transparent; border: none; color: var(--text); font-size: .85rem; cursor: pointer; flex: 1;
+    }
+    .adv-file-row.disabled { opacity: .4; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚔ Minish Cap Randomizer</h1>
+  <p>The Legend of Zelda: The Minish Cap — ROM EU requis</p>
+</header>
+
+<!-- ── Main tab bar ── -->
+<div class="main-tabs-bar" id="mainTabsBar">
+  <button class="main-tab special active" data-tab="tab-general">General</button>
+  <button class="main-tab special" data-tab="tab-advanced">Advanced</button>
+  <!-- logic tabs injected here by JS -->
+</div>
+
+<!-- ── Tab panes ── -->
+<div class="main-tab-panes">
+
+  <!-- General -->
+  <div class="main-tab-pane active" id="tab-general">
+    <div class="general-grid">
+
+      <!-- Setup -->
+      <div class="card setup-panel">
+        <h2>Configuration</h2>
+
+        <div class="field">
+          <label>ROM Minish Cap (EU .gba)</label>
+          <input type="file" id="romFile" accept=".gba,.bin" />
+        </div>
+
+        <div class="field">
+          <label>Seed (hex, optionnel)</label>
+          <div class="seed-row">
+            <input type="text" id="seedInput" placeholder="Aléatoire" maxlength="16" />
+            <button class="btn-secondary" id="btnRandSeed" title="Générer un seed aléatoire">🎲</button>
+          </div>
+        </div>
+
+<div class="field">
+          <label>Setting string (optionnel)</label>
+          <textarea class="setting-string-area field" id="settingStringInput" placeholder="Coller une setting string..."></textarea>
+        </div>
+
+        <div class="field">
+          <label>Cosmetics string (optionnel)</label>
+          <textarea class="setting-string-area field" id="cosmeticsStringInput" placeholder="Coller une cosmetics string..."></textarea>
+        </div>
+
+        <button class="btn-primary" id="btnRandomize" disabled>Randomiser !</button>
+        <div class="spinner" id="spinner"><div class="spin"></div>Randomisation en cours…</div>
+        <div class="error-msg" id="errorMsg"></div>
+      </div>
+
+      <!-- Result -->
+      <div>
+        <div class="card result-panel" id="resultPanel">
+          <h2>Résultat</h2>
+          <div class="hash-canvas-wrap"><canvas id="hashCanvas" width="384" height="48"></canvas></div>
+          <div class="result-info">
+            <div class="info-box">
+              <div class="label">Seed</div>
+              <div class="value" id="resSeed">—</div>
+            </div>
+            <div class="info-box" style="grid-column:1/-1">
+              <div class="label">Setting string</div>
+              <div class="value" id="resSettings">—</div>
+            </div>
+          </div>
+          <div class="download-row">
+            <button class="btn-download" id="btnDlPatch">⬇ Patch (.bps)</button>
+            <button class="btn-download" id="btnDlSpoiler">📄 Spoiler (.txt)</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Logic option tabs are injected here by renderOptions() -->
+
+  <!-- Advanced -->
+  <div class="main-tab-pane" id="tab-advanced">
+
+    <div class="card">
+      <h2>Randomization</h2>
+      <div class="adv-field">
+        <label for="advRetries">Max randomization attempts</label>
+        <input type="number" id="advRetries" min="1" max="20" value="3" />
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Custom Logic, Patch, Global YAML</h2>
+
+      <div class="adv-toggle-row">
+        <input type="checkbox" id="useCustomLogic" />
+        <label for="useCustomLogic">Use Custom Logic File</label>
+      </div>
+      <div class="adv-file-row" id="rowCustomLogic">
+        <label>Logic File (.logic)</label>
+        <input type="file" id="customLogicFile" accept=".logic,.txt" />
+      </div>
+
+      <div class="adv-toggle-row" style="margin-top:.75rem">
+        <input type="checkbox" id="useCustomPatch" />
+        <label for="useCustomPatch">Use Custom Patch Files</label>
+      </div>
+      <div class="adv-file-row" id="rowCustomPatch">
+        <label>ROM Buildfile (.event)</label>
+        <input type="file" id="customPatchFile" accept=".event" />
+      </div>
+
+      <div class="adv-toggle-row" style="margin-top:.75rem">
+        <input type="checkbox" id="useCustomYAML" />
+        <label for="useCustomYAML">Use Global YAML File</label>
+      </div>
+      <div class="adv-file-row" id="rowCustomYAML">
+        <label>YAML File (.yaml / .yml)</label>
+        <input type="file" id="customYAMLFile" accept=".yaml,.yml" />
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Alternative Shufflers</h2>
+      <div class="adv-toggle-row">
+        <input type="checkbox" id="useHendrus" />
+        <label for="useHendrus">Use Hendrus Seed Shuffler</label>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /main-tab-panes -->
+
+<script>
+  let allOptions = [];
+  let lastResult = null;
+
+  // ── Onglets principaux ──
+  function activateMainTab(tabId) {
+    document.querySelectorAll('.main-tab').forEach(t =>
+      t.classList.toggle('active', t.dataset.tab === tabId));
+    document.querySelectorAll('.main-tab-pane').forEach(p =>
+      p.classList.toggle('active', p.id === tabId));
+  }
+
+  document.getElementById('mainTabsBar').addEventListener('click', e => {
+    const tab = e.target.closest('.main-tab');
+    if (tab) activateMainTab(tab.dataset.tab);
+  });
+
+  // ── Chargement options ──
+  async function loadOptions() {
+    try {
+      const r = await fetch('/api/options');
+      if (!r.ok) throw new Error(await r.text());
+      allOptions = await r.json();
+      renderOptions(allOptions);
+      document.getElementById('btnRandomize').disabled = false;
+    } catch (e) {
+      // inject error pane before Advanced
+      const pane = makePaneWithError(e.message);
+      insertBeforeAdvanced(null, pane);
+    }
+  }
+
+  function renderOptions(options) {
+    // Grouper par settingPage
+    const pages = {};
+    for (const opt of options) {
+      const page = opt.settingPage || 'Options';
+      if (!pages[page]) pages[page] = {};
+      const group = opt.settingGroup || 'Divers';
+      if (!pages[page][group]) pages[page][group] = [];
+      pages[page][group].push(opt);
+    }
+
+    for (const [page, groups] of Object.entries(pages)) {
+      const tabId = 'tab-opt-' + page.replace(/\s+/g, '_');
+
+      // Bouton onglet principal (ajouté à la fin de la barre)
+      const btn = document.createElement('button');
+      btn.className = 'main-tab';
+      btn.textContent = page;
+      btn.dataset.tab = tabId;
+      btn.addEventListener('click', () => activateMainTab(tabId));
+      document.getElementById('mainTabsBar').appendChild(btn);
+
+      // Panneau
+      const pane = document.createElement('div');
+      pane.className = 'main-tab-pane';
+      pane.id = tabId;
+
+      for (const [group, opts] of Object.entries(groups)) {
+        const grpEl = document.createElement('div');
+        grpEl.className = 'option-group';
+        grpEl.innerHTML = `<div class="option-group-title">${escHtml(group)}</div>`;
+        for (const opt of opts) grpEl.appendChild(buildOptionEl(opt));
+        pane.appendChild(grpEl);
+      }
+
+      insertBeforeAdvanced(tabId, pane);
+    }
+  }
+
+  function insertBeforeAdvanced(tabId, pane) {
+    const advPane = document.getElementById('tab-advanced');
+    advPane.parentNode.insertBefore(pane, advPane);
+  }
+
+  // ── Construction d'un élément option ──
+  function buildOptionEl(opt) {
+    const item = document.createElement('div');
+    item.className = `option-item type-${opt.type.toLowerCase()}`;
+
+    const tip = opt.descriptionText?.trim();
+    const tipHtml = tip ? `<span class="tooltip-icon" data-tip="${escAttr(tip)}">ℹ</span>` : '';
+
+    switch (opt.type) {
+      case 'Flag':
+        item.innerHTML = `
+          <input type="checkbox" id="${opt.name}" ${opt.active ? 'checked' : ''} data-opt="${opt.name}" />
+          <label for="${opt.name}">${escHtml(opt.niceName)}</label>${tipHtml}`;
+        break;
+
+      case 'Dropdown': {
+        const selOpts = (opt.selections || []).map(s =>
+          `<option value="${escAttr(s)}" ${s === opt.selection ? 'selected' : ''}>${escHtml(s)}</option>`
+        ).join('');
+        item.innerHTML = `
+          <label>${escHtml(opt.niceName)}</label>
+          <select data-opt="${opt.name}">${selOpts}</select>${tipHtml}`;
+        break;
+      }
+
+      case 'NumberBox':
+        item.innerHTML = `
+          <label for="${opt.name}">${escHtml(opt.niceName)}</label>
+          <input type="number" id="${opt.name}" data-opt="${opt.name}"
+            min="${opt.minValue}" max="${opt.maxValue}" value="${escAttr(String(opt.value))}" />${tipHtml}`;
+        break;
+
+      case 'ColorPicker':
+        item.innerHTML = `
+          <input type="checkbox" id="${opt.name}_active" ${opt.active ? 'checked' : ''} data-opt="${opt.name}_active" />
+          <label for="${opt.name}_active">${escHtml(opt.niceName)}</label>
+          <input type="color" data-opt="${opt.name}_color" value="${opt.color || '#ffffff'}" />${tipHtml}`;
+        break;
+
+      default:
+        item.innerHTML = `<label>${escHtml(opt.niceName)}</label>`;
+    }
+    return item;
+  }
+
+  // ── Presets ──
+  async function loadPresets() {
+    try {
+      const r = await fetch('/api/presets');
+      if (!r.ok) return;
+      const data = await r.json();
+      populatePresetSelect('presetSettingsSelect', data['Settings'] || []);
+      populatePresetSelect('presetCosmeticsSelect', data['Cosmetics'] || []);
+    } catch (_) {}
+  }
+
+  function populatePresetSelect(id, presets) {
+    const sel = document.getElementById(id);
+    for (const p of presets) {
+      const opt = document.createElement('option');
+      opt.value = p.file;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    }
+  }
+
+  async function applyPreset(selectId, category) {
+    const sel = document.getElementById(selectId);
+    if (!sel.value) return;
+    const fd = new FormData();
+    fd.append('category', category);
+    fd.append('file', sel.value);
+    try {
+      const r = await fetch('/api/presets/apply', { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!r.ok) { showError(data.error || 'Erreur preset'); return; }
+      if (data.settingString) document.getElementById('settingStringInput').value = data.settingString;
+      if (data.cosmeticsString) document.getElementById('cosmeticsStringInput').value = data.cosmeticsString;
+    } catch (e) {
+      showError('Erreur preset : ' + e.message);
+    }
+  }
+
+
+  // ── Seed aléatoire ──
+  document.getElementById('btnRandSeed').addEventListener('click', () => {
+    const hex = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).toUpperCase().padStart(8, '0');
+    document.getElementById('seedInput').value = hex;
+  });
+
+  // ── Randomise ──
+  document.getElementById('btnRandomize').addEventListener('click', async () => {
+    const romFile = document.getElementById('romFile').files[0];
+    if (!romFile) { showError('Veuillez sélectionner un fichier ROM.'); return; }
+
+    hideError();
+    showSpinner(true);
+    document.getElementById('btnRandomize').disabled = true;
+    document.getElementById('resultPanel').classList.remove('visible');
+
+    const retries = parseInt(document.getElementById('advRetries').value) || 3;
+
+    const fd = new FormData();
+    fd.append('rom', romFile);
+    fd.append('seed', document.getElementById('seedInput').value.trim());
+    fd.append('settingString', document.getElementById('settingStringInput').value.trim());
+    fd.append('retries', String(retries));
+
+    try {
+      const r = await fetch('/api/randomize', { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!r.ok) { showError(data.error || 'Erreur inconnue.'); return; }
+
+      lastResult = data;
+      document.getElementById('resSeed').textContent = data.seed;
+      document.getElementById('resSettings').textContent = data.settingString || '—';
+      document.getElementById('resultPanel').classList.add('visible');
+      if (data.hashIcons) drawHashIcons(data.hashIcons);
+    } catch (e) {
+      showError('Erreur réseau : ' + e.message);
+    } finally {
+      showSpinner(false);
+      document.getElementById('btnRandomize').disabled = false;
+    }
+  });
+
+  // ── Téléchargements ──
+  document.getElementById('btnDlPatch').addEventListener('click', () => {
+    if (!lastResult) return;
+    download(base64ToBytes(lastResult.patch), (lastResult.filename || 'MinishRandomizer') + '.bps', 'application/octet-stream');
+  });
+
+  document.getElementById('btnDlSpoiler').addEventListener('click', () => {
+    if (!lastResult) return;
+    download(new TextEncoder().encode(lastResult.spoiler), (lastResult.filename || 'MinishRandomizer') + '-Spoiler.txt', 'text/plain');
+  });
+
+  // ── Hash icons ──
+  const _hashImg = new Image();
+  _hashImg.src = '/hashicons.png';
+
+  function drawHashIcons(indices) {
+    const canvas = document.getElementById('hashCanvas');
+    const ctx = canvas.getContext('2d');
+    const ICON = 16, SCALE = 3;
+    canvas.width = 8 * ICON * SCALE;
+    canvas.height = ICON * SCALE;
+    ctx.imageSmoothingEnabled = false;
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < 8; i++) {
+        ctx.drawImage(_hashImg, 0, indices[i] * ICON, ICON, ICON, i * ICON * SCALE, 0, ICON * SCALE, ICON * SCALE);
+      }
+    };
+    _hashImg.complete ? draw() : (_hashImg.onload = draw);
+  }
+
+  // ── Helpers ──
+  function base64ToBytes(b64) {
+    const bin = atob(b64);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return buf;
+  }
+
+  function download(bytes, filename, mime) {
+    const blob = new Blob([bytes], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg; el.classList.add('visible');
+  }
+  function hideError() { document.getElementById('errorMsg').classList.remove('visible'); }
+  function showSpinner(v) { document.getElementById('spinner').classList.toggle('visible', v); }
+
+  function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function escAttr(s) {
+    return String(s ?? '').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  loadOptions();
+</script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>WebRandomizer</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\randomizer\RandomizerCore\RandomizerCore.csproj" />
+  </ItemGroup>
+
+  <!-- Copy Patches and Language Raws to output (required by ShufflerBase.ApplyPatch and ColorzCore) -->
+  <ItemGroup>
+    <None Include="..\randomizer\RandomizerCore\Resources\Patches\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Patches\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+    <None Include="..\randomizer\Vendor\Language Raws\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Language Raws\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+    <None Include="..\randomizer\MinishCapRandomizerUI\Resources\Presets\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Presets\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
+</Project>
