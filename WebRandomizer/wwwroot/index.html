@@ -225,13 +225,15 @@
     .option-item input[type="number"] { width: 70px; }
     .option-item input[type="color"] { width: 40px; height: 28px; padding: 2px; cursor: pointer; }
 
-    .tooltip-icon { color: var(--text-muted); cursor: help; font-size: .8rem; flex-shrink: 0; }
+    .tooltip-icon { position: relative; color: var(--text-muted); cursor: help; font-size: .8rem; flex-shrink: 0; }
     .tooltip-icon:hover::after {
-      content: attr(data-tip); position: absolute; right: 0; top: 100%;
+      content: attr(data-tip); position: absolute; right: 0; top: calc(100% + 4px);
       background: #111; border: 1px solid var(--border); border-radius: 4px;
-      color: var(--text); font-size: .8rem; max-width: 260px; padding: .5rem;
-      white-space: pre-wrap; z-index: 10;
+      color: var(--text); font-size: .8rem; width: 260px; padding: .5rem;
+      white-space: pre-wrap; z-index: 100;
+      pointer-events: none;
     }
+    .option-group, .option-item { overflow: visible; }
 
     /* ── Advanced tab ── */
     .adv-field { display: flex; align-items: center; gap: 1rem; margin-bottom: .5rem; }
