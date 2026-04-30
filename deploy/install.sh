@@ -28,7 +28,12 @@ sed "s/randomizer.example.com/$DOMAIN/" apache-webrandomizer.conf \
     > /etc/apache2/sites-available/webrandomizer.conf
 a2ensite webrandomizer
 apache2ctl configtest
-systemctl reload apache2
+systemctl enable apache2
+if systemctl is-active --quiet apache2; then
+    systemctl reload apache2
+else
+    systemctl start apache2
+fi
 echo "Apache : OK"
 
 echo ""
