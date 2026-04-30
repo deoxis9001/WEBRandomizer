@@ -13,36 +13,25 @@ echo "=== Installation WebRandomizer ==="
 mkdir -p "$INSTALL_DIR"
 tar -xzf "$ARCHIVE" -C "$INSTALL_DIR"
 chmod +x "$INSTALL_DIR/WebRandomizer"
-chown -R www-data:www-data "$INSTALL_DIR"
+chown -R apache:apache "$INSTALL_DIR"
 
 # Service systemd
-cp webrandomizer.service /etc/systemd/system/
+sed "s/User=www-data/User=apache/" webrandomizer.service > /etc/systemd/system/webrandomizer.service
 systemctl daemon-reload
 systemctl enable webrandomizer
 systemctl restart webrandomizer
 echo "Service systemd : OK"
 
-# Apache
-# Détecter le nom du service Apache
-if systemctl list-units --type=service | grep -q "httpd"; then
-    APACHE_SVC=httpd
-else
-    APACHE_SVC=apache2
-fi
-
-a2enmod proxy proxy_http headers 2>/dev/null || true
+# Apache (httpd)
 sed "s/randomizer.example.com/$DOMAIN/" apache-webrandomizer.conf \
-    > /etc/apache2/sites-available/webrandomizer.conf 2>/dev/null \
-    || cp apache-webrandomizer.conf /etc/httpd/conf.d/webrandomizer.conf
-a2ensite webrandomizer 2>/dev/null || true
-apache2ctl configtest 2>/dev/null || apachectl configtest
-systemctl enable "$APACHE_SVC"
-if systemctl is-active --quiet "$APACHE_SVC"; then
-    systemctl reload "$APACHE_SVC"
+    > /etc/httpd/conf.d/webrandomizer.conf
+systemctl enable httpd
+if systemctl is-active --quiet httpd; then
+    systemctl reload httpd
 else
-    systemctl start "$APACHE_SVC"
+    systemctl start httpd
 fi
-echo "Apache ($APACHE_SVC) : OK"
+echo "Apache (httpd) : OK"
 
 echo ""
 echo "Déployé sur http://$DOMAIN"

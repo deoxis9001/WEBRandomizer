@@ -70,6 +70,11 @@ Ouvrir `http://randomizer.monsite.com` dans un navigateur pour vérifier.
 ## 4. Activer HTTPS (Let's Encrypt)
 
 ```bash
+# Installer certbot pour httpd
+sudo dnf install -y certbot python3-certbot-apache   # RHEL/Rocky/Alma
+# ou
+sudo apt install -y certbot python3-certbot-apache   # Debian/Ubuntu
+
 sudo certbot --apache -d randomizer.monsite.com
 ```
 
