@@ -23,18 +23,26 @@ systemctl restart webrandomizer
 echo "Service systemd : OK"
 
 # Apache
-a2enmod proxy proxy_http headers
-sed "s/randomizer.example.com/$DOMAIN/" apache-webrandomizer.conf \
-    > /etc/apache2/sites-available/webrandomizer.conf
-a2ensite webrandomizer
-apache2ctl configtest
-systemctl enable apache2
-if systemctl is-active --quiet apache2; then
-    systemctl reload apache2
+# Détecter le nom du service Apache
+if systemctl list-units --type=service | grep -q "httpd"; then
+    APACHE_SVC=httpd
 else
-    systemctl start apache2
+    APACHE_SVC=apache2
 fi
-echo "Apache : OK"
+
+a2enmod proxy proxy_http headers 2>/dev/null || true
+sed "s/randomizer.example.com/$DOMAIN/" apache-webrandomizer.conf \
+    > /etc/apache2/sites-available/webrandomizer.conf 2>/dev/null \
+    || cp apache-webrandomizer.conf /etc/httpd/conf.d/webrandomizer.conf
+a2ensite webrandomizer 2>/dev/null || true
+apache2ctl configtest 2>/dev/null || apachectl configtest
+systemctl enable "$APACHE_SVC"
+if systemctl is-active --quiet "$APACHE_SVC"; then
+    systemctl reload "$APACHE_SVC"
+else
+    systemctl start "$APACHE_SVC"
+fi
+echo "Apache ($APACHE_SVC) : OK"
 
 echo ""
 echo "Déployé sur http://$DOMAIN"
