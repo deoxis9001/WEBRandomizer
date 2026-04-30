@@ -16,12 +16,20 @@ sudo apt install -y apache2 certbot python3-certbot-apache
 
 ## 1. Télécharger la release
 
-Sur GitHub → **Releases** → télécharger `WEBRandomizer-vX.X.X-linux-x64.tar.gz`
+Le repo étant privé, il faut s'authentifier pour télécharger.
 
-Ou directement sur le serveur :
-
+**Option A — GitHub CLI (recommandé)**
 ```bash
-wget https://github.com/deoxis9001/WEBRandomizer/releases/download/v1.0.0/WEBRandomizer-v1.0.0-linux-x64.tar.gz
+sudo apt install -y gh
+gh auth login          # suivre les instructions (browser ou token)
+gh release download v1.0.0 --repo deoxis9001/WEBRandomizer --pattern "*linux-x64*"
+```
+
+**Option B — wget avec un token**
+Créer un token sur GitHub → Settings → Developer settings → Personal access tokens (scope `repo`), puis :
+```bash
+wget --header="Authorization: token TON_TOKEN" \
+     -L "https://github.com/deoxis9001/WEBRandomizer/releases/download/v1.0.0/WEBRandomizer-v1.0.0-linux-x64.tar.gz"
 ```
 
 ---
