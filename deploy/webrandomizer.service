@@ -1,0 +1,16 @@
+[Unit]
+Description=Minish Cap Web Randomizer
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/webrandomizer
+ExecStart=/opt/webrandomizer/WebRandomizer
+Restart=always
+RestartSec=10
+SyslogIdentifier=webrandomizer
+User=www-data
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
+
+[Install]
+WantedBy=multi-user.target
