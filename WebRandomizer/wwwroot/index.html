@@ -603,6 +603,14 @@
   }
 
 
+  // Clear pasted setting string when the user changes an option in the UI
+  document.addEventListener('change', e => {
+    if (e.target.dataset.opt) {
+      document.getElementById('settingStringInput').value = '';
+      document.getElementById('cosmeticsStringInput').value = '';
+    }
+  });
+
   // ── Seed aléatoire ──
   document.getElementById('btnRandSeed').addEventListener('click', () => {
     const hex = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).toUpperCase().padStart(8, '0');
@@ -639,9 +647,20 @@
 
     const fd = new FormData();
     fd.append('seed', document.getElementById('seedInput').value.trim());
-    fd.append('settingString', document.getElementById('settingStringInput').value.trim());
-    fd.append('cosmeticsString', document.getElementById('cosmeticsStringInput').value.trim());
+    const settingStr = document.getElementById('settingStringInput').value.trim();
+    const cosmeticsStr = document.getElementById('cosmeticsStringInput').value.trim();
+    fd.append('settingString', settingStr);
+    fd.append('cosmeticsString', cosmeticsStr);
     fd.append('entityAddresses', JSON.stringify(vanillaEntityAddresses));
+
+    // If no setting string is pasted, collect option values directly from the UI
+    if (!settingStr) {
+      const optionValues = {};
+      document.querySelectorAll('[data-opt]').forEach(el => {
+        optionValues[el.dataset.opt] = el.type === 'checkbox' ? String(el.checked) : el.value;
+      });
+      fd.append('optionValues', JSON.stringify(optionValues));
+    }
 
     try {
       console.log('[rando] POST /api/randomize…');
@@ -664,6 +683,8 @@
 
       document.getElementById('resSeed').textContent = data.seed;
       document.getElementById('resSettings').textContent = data.settingString || '—';
+      if (data.settingString) document.getElementById('settingStringInput').value = data.settingString;
+      if (data.cosmeticsString) document.getElementById('cosmeticsStringInput').value = data.cosmeticsString;
       document.getElementById('resultPanel').classList.add('visible');
       if (data.hashIcons) drawHashIcons(data.hashIcons);
     } catch (e) {

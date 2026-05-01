@@ -171,14 +171,40 @@ app.MapPost("/api/randomize", async (HttpRequest request) =>
         {
             var settingResult = controller.LoadSettingsFromSettingString(settingString);
             if (!settingResult.WasSuccessful)
-                return Results.BadRequest(new { error = $"Setting string invalide : {settingResult.ErrorMessage}" });
+                return Results.BadRequest(new { error = $"Invalid setting string: {settingResult.ErrorMessage}" });
+        }
+        else
+        {
+            // No pasted setting string — apply raw option values from the UI
+            var optionValuesJson = form["optionValues"].ToString();
+            if (!string.IsNullOrWhiteSpace(optionValuesJson))
+            {
+                try
+                {
+                    var vals = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(optionValuesJson);
+                    if (vals != null)
+                        foreach (var opt in controller.GetSelectedOptions())
+                        {
+                            if (!vals.TryGetValue(opt.Name, out var v)) continue;
+                            switch (opt)
+                            {
+                                case LogicFlag f: f.Active = v == "true"; break;
+                                case LogicDropdown d:
+                                    if (d.Selections.ContainsKey(v)) d.Selection = v;
+                                    break;
+                                case LogicNumberBox nb: nb.Value = v; break;
+                            }
+                        }
+                }
+                catch { /* ignore malformed values */ }
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(cosmeticsString))
         {
             var cosResult = controller.LoadCosmeticsFromCosmeticsString(cosmeticsString);
             if (!cosResult.WasSuccessful)
-                return Results.BadRequest(new { error = $"Cosmetics string invalide : {cosResult.ErrorMessage}" });
+                return Results.BadRequest(new { error = $"Invalid cosmetics string: {cosResult.ErrorMessage}" });
         }
 
         ulong seed = !string.IsNullOrWhiteSpace(seedStr) &&
