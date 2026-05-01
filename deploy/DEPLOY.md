@@ -98,7 +98,7 @@ wget https://github.com/deoxis9001/WEBRandomizer/releases/download/v1.1.0/WEBRan
 sudo systemctl stop webrandomizer
 
 # Remplacer les fichiers
-sudo tar -xzf WEBRandomizer-v1.1.0-linux-x64.tar.gz -C /opt/webrandomizer/
+sudo tar -xzf WEBRandomizer-v1.0.1-linux-x64.tar.gz -C /opt/webrandomizer/
 sudo chown -R www-data:www-data /opt/webrandomizer/
 
 # Redémarrer
