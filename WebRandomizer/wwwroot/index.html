@@ -256,6 +256,7 @@
     }
     .adv-file-row.disabled { opacity: .4; pointer-events: none; }
 
+    .rom-note { font-size: .75rem; color: var(--text-muted); margin-top: .5rem; text-align: center; }
     .rom-status { font-size: .8rem; margin-top: .35rem; }
     .rom-status.ok    { color: var(--green-light); }
     .rom-status.bad   { color: var(--error); }
@@ -277,7 +278,7 @@
 
 <header>
   <h1>⚔ Minish Cap Randomizer</h1>
-  <p>The Legend of Zelda: The Minish Cap — ROM EU requis au téléchargement uniquement (votre ROM ne quitte jamais votre navigateur)</p>
+  <p>The Legend of Zelda: The Minish Cap — Version EU</p>
 </header>
 
 <!-- ── Main tab bar ── -->
@@ -296,35 +297,35 @@
 
       <!-- Setup -->
       <div class="card setup-panel">
-        <h2>Configuration</h2>
+        <h2>Setup</h2>
 
         <div class="field">
-          <label>Seed (hex, optionnel)</label>
+          <label>Seed (hex, optional)</label>
           <div class="seed-row">
-            <input type="text" id="seedInput" placeholder="Aléatoire" maxlength="16" />
-            <button class="btn-secondary" id="btnRandSeed" title="Générer un seed aléatoire">🎲</button>
+            <input type="text" id="seedInput" placeholder="Random" maxlength="16" />
+            <button class="btn-secondary" id="btnRandSeed" title="Generate a random seed">🎲</button>
           </div>
         </div>
 
-<div class="field">
-          <label>Setting string (optionnel)</label>
-          <textarea class="setting-string-area field" id="settingStringInput" placeholder="Coller une setting string..."></textarea>
+        <div class="field">
+          <label>Setting string (optional)</label>
+          <textarea class="setting-string-area field" id="settingStringInput" placeholder="Paste a setting string..."></textarea>
         </div>
 
         <div class="field">
-          <label>Cosmetics string (optionnel)</label>
-          <textarea class="setting-string-area field" id="cosmeticsStringInput" placeholder="Coller une cosmetics string..."></textarea>
+          <label>Cosmetics string (optional)</label>
+          <textarea class="setting-string-area field" id="cosmeticsStringInput" placeholder="Paste a cosmetics string..."></textarea>
         </div>
 
-        <button class="btn-primary" id="btnRandomize" disabled>Randomiser !</button>
-        <div class="spinner" id="spinner"><div class="spin"></div>Randomisation en cours…</div>
+        <button class="btn-primary" id="btnRandomize" disabled>Randomize!</button>
+        <div class="spinner" id="spinner"><div class="spin"></div>Randomizing…</div>
         <div class="error-msg" id="errorMsg"></div>
       </div>
 
       <!-- Result -->
       <div>
         <div class="card result-panel" id="resultPanel">
-          <h2>Résultat</h2>
+          <h2>Result</h2>
           <div class="hash-canvas-wrap"><canvas id="hashCanvas" width="384" height="48"></canvas></div>
           <div class="result-info">
             <div class="info-box">
@@ -338,7 +339,7 @@
           </div>
           <div class="download-row">
             <button class="btn-download" id="btnDlPatch">⬇ Patch (.bps)</button>
-            <button class="btn-download" id="btnDlRom">⬇ ROM patché (.gba)</button>
+            <button class="btn-download" id="btnDlRom">⬇ Patched ROM (.gba)</button>
             <button class="btn-download" id="btnDlSpoiler">📄 Spoiler (.txt)</button>
           </div>
         </div>
@@ -404,7 +405,7 @@
 </div><!-- /main-tab-panes -->
 
 <footer class="legal-footer">
-  Aucun ROM n'est envoyé au serveur. Tous les traitements de votre ROM se font en local dans votre navigateur. — <a href="/legal.html">Mentions légales</a>
+  <a href="/legal.html">Legal notice</a>
 </footer>
 
 <script src="bps.js"></script>
@@ -593,11 +594,11 @@
     try {
       const r = await fetch('/api/presets/apply', { method: 'POST', body: fd });
       const data = await r.json();
-      if (!r.ok) { showError(data.error || 'Erreur preset'); return; }
+      if (!r.ok) { showError(data.error || 'Preset error'); return; }
       if (data.settingString) document.getElementById('settingStringInput').value = data.settingString;
       if (data.cosmeticsString) document.getElementById('cosmeticsStringInput').value = data.cosmeticsString;
     } catch (e) {
-      showError('Erreur preset : ' + e.message);
+      showError('Preset error: ' + e.message);
     }
   }
 
@@ -630,7 +631,7 @@
       }
     }
     if (!vanillaEntityAddresses) {
-      showError('Données internes non prêtes. Rechargez la page et réessayez.');
+      showError('Internal data not ready. Please reload the page and try again.');
       showSpinner(false);
       document.getElementById('btnRandomize').disabled = false;
       return;
@@ -648,7 +649,7 @@
       let data;
       try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }
       console.log('[rando] réponse HTTP', r.status, data.error ?? `${data.writes?.length} writes`);
-      if (!r.ok) { showError(data.error || 'Erreur inconnue.'); return; }
+      if (!r.ok) { showError(data.error || 'Unknown error.'); return; }
 
       lastResult = {
         seed: data.seed,
@@ -666,7 +667,7 @@
       document.getElementById('resultPanel').classList.add('visible');
       if (data.hashIcons) drawHashIcons(data.hashIcons);
     } catch (e) {
-      showError('Erreur réseau : ' + e.message);
+      showError('Network error: ' + e.message);
     } finally {
       showSpinner(false);
       document.getElementById('btnRandomize').disabled = false;
@@ -693,14 +694,14 @@
             computeEntityAddresses(vanillaRomBytes);
             resolve(true);
           } else if (code === 'BZME') {
-            showError('ROM USA détectée (BZME). Le randomizer cible la version EU (BZMP) — utilisez la bonne version.');
+            showError('US ROM detected (BZME). This randomizer targets the EU version (BZMP) — please use the correct ROM.');
             resolve(false);
           } else {
-            showError(`ROM non reconnue (code: "${code}"). Vérifiez que c'est bien Minish Cap EU.`);
+            showError(`Unrecognized ROM (code: "${code}"). Please make sure it's Minish Cap EU.`);
             resolve(false);
           }
         } catch (err) {
-          showError('Erreur lecture ROM : ' + err.message);
+          showError('ROM read error: ' + err.message);
           resolve(false);
         }
       };
@@ -777,7 +778,7 @@
   // ── Téléchargements ──
   document.getElementById('btnDlPatch').addEventListener('click', async () => {
     if (!lastResult) return;
-    if (!await ensureRom()) { showError('ROM requis pour générer le patch.'); return; }
+    if (!await ensureRom()) { showError('A ROM is required to generate the patch.'); return; }
     const modified = applyWrites();
     console.group('[bps] génération patch');
     console.log('source:', vanillaRomBytes.length, 'bytes | target:', modified.length, 'bytes');
@@ -791,7 +792,7 @@
 
   document.getElementById('btnDlRom').addEventListener('click', async () => {
     if (!lastResult) return;
-    if (!await ensureRom()) { showError('ROM requis pour générer le ROM patché.'); return; }
+    if (!await ensureRom()) { showError('A ROM is required to generate the patched ROM.'); return; }
     const modified = applyWrites();
     console.log('[rom] téléchargement .gba', modified.length, 'bytes');
     download(modified, (lastResult.filename || 'MinishRandomizer') + '.gba', 'application/octet-stream');
