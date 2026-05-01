@@ -1,15 +1,40 @@
 using System.Globalization;
 using System.Reflection;
+using System.Text.RegularExpressions;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using RandomizerCore.Controllers;
+using RandomizerCore.Core;
 using RandomizerCore.Random;
 using RandomizerCore.Randomizer.Logic.Options;
 
+const int MaxRequestBodyBytes = 64 * 1024; // 64 KB — no ROM is uploaded.
+const int MaxStringLength = 4096;
+const string RandomizePolicy = "randomize";
+
 var builder = WebApplication.CreateBuilder(args);
-builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 32 * 1024 * 1024); // 32 MB for ROM
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = MaxRequestBodyBytes);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(RandomizePolicy, httpContext =>
+    {
+        var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anon";
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+        });
+    });
+});
 
 var app = builder.Build();
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseRateLimiter();
 
 app.MapGet("/hashicons.png", () =>
 {
@@ -18,8 +43,8 @@ app.MapGet("/hashicons.png", () =>
     return stream is null ? Results.NotFound() : Results.Stream(stream, "image/png");
 });
 
-// Prevent concurrent access to the static Rom singleton
-var romSemaphore = new SemaphoreSlim(1, 1);
+// Serialize access to the static Rom singleton and the global ColorzCore output stream.
+var randomizerSemaphore = new SemaphoreSlim(1, 1);
 
 app.MapGet("/api/options", () =>
 {
@@ -86,27 +111,23 @@ app.MapPost("/api/randomize", async (HttpRequest request) =>
         return Results.BadRequest(new { error = "Expected multipart/form-data" });
 
     var form = await request.ReadFormAsync();
-    var romFile = form.Files["rom"];
-    if (romFile == null)
-        return Results.BadRequest(new { error = "Missing ROM file" });
-
     var seedStr = form["seed"].ToString();
     var settingString = form["settingString"].ToString();
     var cosmeticsString = form["cosmeticsString"].ToString();
 
-    var tempFile = Path.GetTempFileName();
-    await romSemaphore.WaitAsync();
+    if (!string.IsNullOrWhiteSpace(seedStr) &&
+        !Regex.IsMatch(seedStr, "^[0-9A-Fa-f]{1,16}$"))
+        return Results.BadRequest(new { error = "Seed invalide (1-16 hex)" });
+
+    if (settingString.Length > MaxStringLength || cosmeticsString.Length > MaxStringLength)
+        return Results.BadRequest(new { error = "settingString/cosmeticsString trop long" });
+
+    await randomizerSemaphore.WaitAsync();
     try
     {
-        using (var fs = File.Create(tempFile))
-            await romFile.CopyToAsync(fs);
-
         var controller = new ShufflerController();
         controller.LoadLogicFile();
-
-        var loadResult = controller.LoadRom(tempFile);
-        if (!loadResult.WasSuccessful)
-            return Results.BadRequest(new { error = $"ROM invalide : {loadResult.ErrorMessage}" });
+        Rom.InitializeDummy();
 
         if (!string.IsNullOrWhiteSpace(settingString))
         {
@@ -137,16 +158,16 @@ app.MapPost("/api/randomize", async (HttpRequest request) =>
         if (!randResult.WasSuccessful)
             return Results.BadRequest(new { error = $"Randomisation échouée : {randResult.ErrorMessage}" });
 
-        var patch = controller.CreatePatch(out var patchResult);
-        if (!patchResult.WasSuccessful)
-            return Results.BadRequest(new { error = $"Création du patch échouée : {patchResult.ErrorMessage}" });
+        var writes = controller.GetRandomizationWrites(out var writesResult);
+        if (!writesResult.WasSuccessful)
+            return Results.BadRequest(new { error = $"Calcul du manifest échoué : {writesResult.ErrorMessage}" });
 
         var spoiler = controller.CreateSpoiler();
         var hashIcons = ComputeHashIcons(controller.GetEventWrites());
 
         return Results.Ok(new
         {
-            patch = Convert.ToBase64String(patch.Content!),
+            writes = writes.Select(w => new[] { w.Offset, w.Value }),
             spoiler,
             seed = $"{seed:X}",
             settingString = controller.GetFinalSettingsString(),
@@ -161,10 +182,9 @@ app.MapPost("/api/randomize", async (HttpRequest request) =>
     }
     finally
     {
-        if (File.Exists(tempFile)) File.Delete(tempFile);
-        romSemaphore.Release();
+        randomizerSemaphore.Release();
     }
-});
+}).RequireRateLimiting(RandomizePolicy);
 
 app.Run();
 

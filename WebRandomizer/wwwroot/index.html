@@ -255,13 +255,29 @@
       background: transparent; border: none; color: var(--text); font-size: .85rem; cursor: pointer; flex: 1;
     }
     .adv-file-row.disabled { opacity: .4; pointer-events: none; }
+
+    .rom-status { font-size: .8rem; margin-top: .35rem; }
+    .rom-status.ok    { color: var(--green-light); }
+    .rom-status.bad   { color: var(--error); }
+    .rom-status.muted { color: var(--text-muted); }
+
+    footer.legal-footer {
+      text-align: center;
+      padding: .9rem;
+      color: var(--text-muted);
+      font-size: .78rem;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    footer.legal-footer a { color: var(--gold); text-decoration: none; }
+    footer.legal-footer a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
 
 <header>
   <h1>⚔ Minish Cap Randomizer</h1>
-  <p>The Legend of Zelda: The Minish Cap — ROM EU requis</p>
+  <p>The Legend of Zelda: The Minish Cap — ROM EU requis (votre ROM ne quitte jamais votre navigateur)</p>
 </header>
 
 <!-- ── Main tab bar ── -->
@@ -285,6 +301,7 @@
         <div class="field">
           <label>ROM Minish Cap (EU .gba)</label>
           <input type="file" id="romFile" accept=".gba,.bin" />
+          <div class="rom-status muted" id="romStatus">Aucun fichier sélectionné.</div>
         </div>
 
         <div class="field">
@@ -327,6 +344,7 @@
           </div>
           <div class="download-row">
             <button class="btn-download" id="btnDlPatch">⬇ Patch (.bps)</button>
+            <button class="btn-download" id="btnDlRom">⬇ ROM patché (.gba)</button>
             <button class="btn-download" id="btnDlSpoiler">📄 Spoiler (.txt)</button>
           </div>
         </div>
@@ -391,9 +409,20 @@
 
 </div><!-- /main-tab-panes -->
 
+<footer class="legal-footer">
+  Aucun ROM n'est envoyé au serveur. Tous les traitements de votre ROM se font en local dans votre navigateur. — <a href="/legal.html">Mentions légales</a>
+</footer>
+
+<script src="bps.js"></script>
 <script>
   let allOptions = [];
   let lastResult = null;
+  let vanillaRomBytes = null; // Uint8Array — set when a valid ROM is loaded.
+
+  // SHA-1 of the vanilla EU "Legend of Zelda - The Minish Cap" (BZMP) ROM.
+  // Source: no-intro / GoodGBA. If your ROM mismatches, the warning below
+  // explains why; the user can still proceed at their own risk.
+  const VANILLA_EU_SHA1 = 'b4bd50e4131b027c334547b4524e2dbbd4227130';
 
   // ── Onglets principaux ──
   function activateMainTab(tabId) {
@@ -557,30 +586,80 @@
     document.getElementById('seedInput').value = hex;
   });
 
+  // ── Validation ROM côté client ──
+  async function sha1Hex(buf) {
+    const h = await crypto.subtle.digest('SHA-1', buf);
+    return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function setRomStatus(cls, msg) {
+    const el = document.getElementById('romStatus');
+    el.className = 'rom-status ' + cls;
+    el.textContent = msg;
+  }
+
+  document.getElementById('romFile').addEventListener('change', async e => {
+    vanillaRomBytes = null;
+    const file = e.target.files[0];
+    if (!file) { setRomStatus('muted', 'Aucun fichier sélectionné.'); return; }
+    setRomStatus('muted', 'Vérification du ROM…');
+    try {
+      const buf = await file.arrayBuffer();
+      const hash = await sha1Hex(buf);
+      if (hash === VANILLA_EU_SHA1) {
+        vanillaRomBytes = new Uint8Array(buf);
+        setRomStatus('ok', `ROM EU vanilla reconnu (SHA-1 ${hash.slice(0, 12)}…).`);
+      } else {
+        vanillaRomBytes = new Uint8Array(buf); // accept anyway, with warning
+        setRomStatus('bad', `Hash inattendu (${hash.slice(0, 12)}…). Le patch peut ne pas fonctionner.`);
+      }
+    } catch (err) {
+      setRomStatus('bad', 'Erreur lecture ROM : ' + err.message);
+    }
+  });
+
   // ── Randomise ──
   document.getElementById('btnRandomize').addEventListener('click', async () => {
-    const romFile = document.getElementById('romFile').files[0];
-    if (!romFile) { showError('Veuillez sélectionner un fichier ROM.'); return; }
+    if (!vanillaRomBytes) { showError('Veuillez sélectionner un fichier ROM.'); return; }
 
     hideError();
     showSpinner(true);
     document.getElementById('btnRandomize').disabled = true;
     document.getElementById('resultPanel').classList.remove('visible');
 
-    const retries = parseInt(document.getElementById('advRetries').value) || 3;
-
     const fd = new FormData();
-    fd.append('rom', romFile);
     fd.append('seed', document.getElementById('seedInput').value.trim());
     fd.append('settingString', document.getElementById('settingStringInput').value.trim());
-    fd.append('retries', String(retries));
+    fd.append('cosmeticsString', document.getElementById('cosmeticsStringInput').value.trim());
 
     try {
       const r = await fetch('/api/randomize', { method: 'POST', body: fd });
-      const data = await r.json();
+      let data;
+      try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }
       if (!r.ok) { showError(data.error || 'Erreur inconnue.'); return; }
 
-      lastResult = data;
+      // Apply manifest writes onto a local copy of the vanilla ROM
+      const modified = new Uint8Array(vanillaRomBytes);
+      for (const w of data.writes) {
+        const offset = w[0] | 0;
+        const value  = w[1] & 0xFF;
+        if (offset >= 0 && offset < modified.length) modified[offset] = value;
+      }
+
+      // Generate the BPS patch in the browser
+      const bpsBytes = BPS.generate(vanillaRomBytes, modified);
+
+      lastResult = {
+        seed: data.seed,
+        settingString: data.settingString,
+        cosmeticsString: data.cosmeticsString,
+        filename: data.filename,
+        spoiler: data.spoiler,
+        hashIcons: data.hashIcons,
+        bps: bpsBytes,
+        patchedRom: modified
+      };
+
       document.getElementById('resSeed').textContent = data.seed;
       document.getElementById('resSettings').textContent = data.settingString || '—';
       document.getElementById('resultPanel').classList.add('visible');
@@ -596,7 +675,12 @@
   // ── Téléchargements ──
   document.getElementById('btnDlPatch').addEventListener('click', () => {
     if (!lastResult) return;
-    download(base64ToBytes(lastResult.patch), (lastResult.filename || 'MinishRandomizer') + '.bps', 'application/octet-stream');
+    download(lastResult.bps, (lastResult.filename || 'MinishRandomizer') + '.bps', 'application/octet-stream');
+  });
+
+  document.getElementById('btnDlRom').addEventListener('click', () => {
+    if (!lastResult) return;
+    download(lastResult.patchedRom, (lastResult.filename || 'MinishRandomizer') + '.gba', 'application/octet-stream');
   });
 
   document.getElementById('btnDlSpoiler').addEventListener('click', () => {
@@ -625,13 +709,6 @@
   }
 
   // ── Helpers ──
-  function base64ToBytes(b64) {
-    const bin = atob(b64);
-    const buf = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-    return buf;
-  }
-
   function download(bytes, filename, mime) {
     const blob = new Blob([bytes], { type: mime });
     const url = URL.createObjectURL(blob);
