@@ -340,6 +340,7 @@ internal abstract class ShufflerBase
             UpdateEntrances(writer);
             writer.Flush();
 
+            sparse.Seek(0, SeekOrigin.Begin);
             int exitCode = ApplyPatch(sparse, patchFile);
             if (exitCode != 0)
                 throw new Exception($"ColorzCore returned non-zero exit code {exitCode}");

@@ -277,7 +277,7 @@
 
 <header>
   <h1>⚔ Minish Cap Randomizer</h1>
-  <p>The Legend of Zelda: The Minish Cap — ROM EU requis (votre ROM ne quitte jamais votre navigateur)</p>
+  <p>The Legend of Zelda: The Minish Cap — ROM EU requis au téléchargement uniquement (votre ROM ne quitte jamais votre navigateur)</p>
 </header>
 
 <!-- ── Main tab bar ── -->
@@ -297,12 +297,6 @@
       <!-- Setup -->
       <div class="card setup-panel">
         <h2>Configuration</h2>
-
-        <div class="field">
-          <label>ROM Minish Cap (EU .gba)</label>
-          <input type="file" id="romFile" accept=".gba,.bin" />
-          <div class="rom-status muted" id="romStatus">Aucun fichier sélectionné.</div>
-        </div>
 
         <div class="field">
           <label>Seed (hex, optionnel)</label>
@@ -418,11 +412,39 @@
   let allOptions = [];
   let lastResult = null;
   let vanillaRomBytes = null; // Uint8Array — set when a valid ROM is loaded.
+  let entityTriples = null;   // [[area,room,chest], …] — fetched from /api/entity-triples.
+  let vanillaEntityAddresses = null; // {packed_key: offset} — resolved from vanilla ROM.
 
-  // SHA-1 of the vanilla EU "Legend of Zelda - The Minish Cap" (BZMP) ROM.
-  // Source: no-intro / GoodGBA. If your ROM mismatches, the warning below
-  // explains why; the user can still proceed at their own risk.
-  const VANILLA_EU_SHA1 = 'b4bd50e4131b027c334547b4524e2dbbd4227130';
+  // ── Entity address resolution (zero-ROM flow) ──
+  function readU32LE(bytes, off) {
+    return ((bytes[off] | (bytes[off+1]<<8) | (bytes[off+2]<<16) | (bytes[off+3]<<24)) >>> 0);
+  }
+  function readAddr(bytes, off) {
+    return readU32LE(bytes, off) & 0xFFFFFF;
+  }
+  const AREA_META_BASE = 0x0D4828; // EU (BZMP)
+
+  function computeEntityAddresses(bytes) {
+    if (!entityTriples) return;
+    const map = {};
+    for (const [area, room, chest] of entityTriples) {
+      const areaTableAddr  = readAddr(bytes, AREA_META_BASE + (area << 2));
+      const roomTableAddr  = readAddr(bytes, areaTableAddr   + (room << 2));
+      const chestTableAddr = readAddr(bytes, roomTableAddr   + 0x0C);
+      const offset = chestTableAddr + chest * 8 + 0x02;
+      const key = (area << 16) | (room << 8) | chest;
+      map[key] = offset;
+    }
+    vanillaEntityAddresses = map;
+    console.log('[rom] entity addresses computed:', Object.keys(map).length);
+  }
+
+  // Fetch entity triples once at startup.
+  fetch('/api/entity-triples').then(r => r.json()).then(t => {
+    entityTriples = t;
+    console.log('[rom] entity triples loaded:', t.length);
+    if (vanillaRomBytes) computeEntityAddresses(vanillaRomBytes);
+  }).catch(e => console.warn('[rom] entity-triples fetch failed:', e));
 
   // ── Onglets principaux ──
   function activateMainTab(tabId) {
@@ -587,67 +609,46 @@
   });
 
   // ── Validation ROM côté client ──
-  async function sha1Hex(buf) {
-    const h = await crypto.subtle.digest('SHA-1', buf);
-    return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, '0')).join('');
+  function readGameCode(buf) {
+    return String.fromCharCode(...new Uint8Array(buf, 0xAC, 4));
   }
 
-  function setRomStatus(cls, msg) {
-    const el = document.getElementById('romStatus');
-    el.className = 'rom-status ' + cls;
-    el.textContent = msg;
-  }
-
-  document.getElementById('romFile').addEventListener('change', async e => {
-    vanillaRomBytes = null;
-    const file = e.target.files[0];
-    if (!file) { setRomStatus('muted', 'Aucun fichier sélectionné.'); return; }
-    setRomStatus('muted', 'Vérification du ROM…');
-    try {
-      const buf = await file.arrayBuffer();
-      const hash = await sha1Hex(buf);
-      if (hash === VANILLA_EU_SHA1) {
-        vanillaRomBytes = new Uint8Array(buf);
-        setRomStatus('ok', `ROM EU vanilla reconnu (SHA-1 ${hash.slice(0, 12)}…).`);
-      } else {
-        vanillaRomBytes = new Uint8Array(buf); // accept anyway, with warning
-        setRomStatus('bad', `Hash inattendu (${hash.slice(0, 12)}…). Le patch peut ne pas fonctionner.`);
-      }
-    } catch (err) {
-      setRomStatus('bad', 'Erreur lecture ROM : ' + err.message);
-    }
-  });
 
   // ── Randomise ──
   document.getElementById('btnRandomize').addEventListener('click', async () => {
-    if (!vanillaRomBytes) { showError('Veuillez sélectionner un fichier ROM.'); return; }
-
     hideError();
     showSpinner(true);
     document.getElementById('btnRandomize').disabled = true;
     document.getElementById('resultPanel').classList.remove('visible');
 
+    if (!vanillaEntityAddresses) {
+      const ok = await ensureRom();
+      if (!ok) {
+        showSpinner(false);
+        document.getElementById('btnRandomize').disabled = false;
+        return;
+      }
+    }
+    if (!vanillaEntityAddresses) {
+      showError('Données internes non prêtes. Rechargez la page et réessayez.');
+      showSpinner(false);
+      document.getElementById('btnRandomize').disabled = false;
+      return;
+    }
+
     const fd = new FormData();
     fd.append('seed', document.getElementById('seedInput').value.trim());
     fd.append('settingString', document.getElementById('settingStringInput').value.trim());
     fd.append('cosmeticsString', document.getElementById('cosmeticsStringInput').value.trim());
+    fd.append('entityAddresses', JSON.stringify(vanillaEntityAddresses));
 
     try {
+      console.log('[rando] POST /api/randomize…');
       const r = await fetch('/api/randomize', { method: 'POST', body: fd });
       let data;
       try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }
+      console.log('[rando] réponse HTTP', r.status, data.error ?? `${data.writes?.length} writes`);
       if (!r.ok) { showError(data.error || 'Erreur inconnue.'); return; }
-
-      // Apply manifest writes onto a local copy of the vanilla ROM
-      const modified = new Uint8Array(vanillaRomBytes);
-      for (const w of data.writes) {
-        const offset = w[0] | 0;
-        const value  = w[1] & 0xFF;
-        if (offset >= 0 && offset < modified.length) modified[offset] = value;
-      }
-
-      // Generate the BPS patch in the browser
-      const bpsBytes = BPS.generate(vanillaRomBytes, modified);
 
       lastResult = {
         seed: data.seed,
@@ -656,9 +657,9 @@
         filename: data.filename,
         spoiler: data.spoiler,
         hashIcons: data.hashIcons,
-        bps: bpsBytes,
-        patchedRom: modified
+        writes: data.writes,
       };
+      console.log('[rando] seed:', data.seed, '| writes:', data.writes?.length);
 
       document.getElementById('resSeed').textContent = data.seed;
       document.getElementById('resSettings').textContent = data.settingString || '—';
@@ -672,15 +673,128 @@
     }
   });
 
+  // ── ROM à la demande ──
+  async function ensureRom() {
+    if (vanillaRomBytes) return true;
+    return new Promise(resolve => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.gba,.bin';
+      input.onchange = async e => {
+        const file = e.target.files[0];
+        if (!file) { resolve(false); return; }
+        try {
+          const buf = await file.arrayBuffer();
+          const code = readGameCode(buf);
+          console.log('[rom] taille:', buf.byteLength, '| game code @0xAC:', code);
+          if (code === 'BZMP') {
+            vanillaRomBytes = new Uint8Array(buf);
+            console.log('[rom] ROM EU acceptée');
+            computeEntityAddresses(vanillaRomBytes);
+            resolve(true);
+          } else if (code === 'BZME') {
+            showError('ROM USA détectée (BZME). Le randomizer cible la version EU (BZMP) — utilisez la bonne version.');
+            resolve(false);
+          } else {
+            showError(`ROM non reconnue (code: "${code}"). Vérifiez que c'est bien Minish Cap EU.`);
+            resolve(false);
+          }
+        } catch (err) {
+          showError('Erreur lecture ROM : ' + err.message);
+          resolve(false);
+        }
+      };
+      input.click();
+    });
+  }
+
+  function crc32Buf(buf) {
+    return BPS.crc32(buf).toString(16).toUpperCase().padStart(8, '0');
+  }
+
+  function applyWrites() {
+    const writes = lastResult.writes;
+    const romLen = vanillaRomBytes.length;
+    console.group('[patch] applyWrites');
+    console.log('writes reçus :', writes.length);
+    console.log('taille ROM    :', '0x' + romLen.toString(16), '(' + romLen + ' bytes)');
+
+    // offsets min/max et hors-limite
+    let minOff = Infinity, maxOff = -Infinity, skipped = 0;
+    for (const w of writes) {
+      const o = w[0] | 0;
+      if (o < 0 || o >= romLen) { skipped++; continue; }
+      if (o < minOff) minOff = o;
+      if (o > maxOff) maxOff = o;
+    }
+    console.log('offset min    :', minOff === Infinity ? 'n/a' : '0x' + minOff.toString(16));
+    console.log('offset max    :', maxOff === -Infinity ? 'n/a' : '0x' + maxOff.toString(16));
+    if (skipped) console.warn('writes hors ROM:', skipped, '(ignorés)');
+
+    // 5 premiers et 5 derniers writes
+    const fmtW = (w) => {
+      const o = w[0]|0, v = w[1]&0xFF, van = vanillaRomBytes[o];
+      return `0x${o.toString(16)}: vanilla=0x${van.toString(16)} → 0x${v.toString(16)}${v===van?' (noop)':''}`;
+    };
+    console.log('premiers writes:');
+    writes.slice(0, 8).forEach(w => console.log(' ', fmtW(w)));
+    console.log('derniers writes:');
+    writes.slice(-4).forEach(w => console.log(' ', fmtW(w)));
+
+    // CRC32 vanilla
+    console.log('CRC32 vanilla :', crc32Buf(vanillaRomBytes));
+
+    // Appliquer
+    const modified = new Uint8Array(vanillaRomBytes);
+    for (const w of writes) {
+      const offset = w[0] | 0;
+      if (offset >= 0 && offset < romLen) modified[offset] = w[1] & 0xFF;
+    }
+
+    // Analyser les writes
+    let dupes = 0, noops = 0;
+    const seen = new Set();
+    for (const w of writes) {
+      const o = w[0] | 0;
+      if (o < 0 || o >= romLen) continue;
+      if (seen.has(o)) dupes++;
+      else seen.add(o);
+      if ((w[1] & 0xFF) === vanillaRomBytes[o]) noops++;
+    }
+
+    // Compter les bytes qui ont changé
+    let changed = 0;
+    for (let i = 0; i < romLen; i++) if (modified[i] !== vanillaRomBytes[i]) changed++;
+    console.log('bytes modifiés:', changed);
+    console.log('→ writes doublons (même offset):', dupes);
+    console.log('→ writes no-op (= valeur vanilla):', noops);
+    console.log('→ attendu: writes - doublons - noops ≈ bytes modifiés');
+    console.log('CRC32 modifié :', crc32Buf(modified));
+    console.groupEnd();
+    return modified;
+  }
+
   // ── Téléchargements ──
-  document.getElementById('btnDlPatch').addEventListener('click', () => {
+  document.getElementById('btnDlPatch').addEventListener('click', async () => {
     if (!lastResult) return;
-    download(lastResult.bps, (lastResult.filename || 'MinishRandomizer') + '.bps', 'application/octet-stream');
+    if (!await ensureRom()) { showError('ROM requis pour générer le patch.'); return; }
+    const modified = applyWrites();
+    console.group('[bps] génération patch');
+    console.log('source:', vanillaRomBytes.length, 'bytes | target:', modified.length, 'bytes');
+    const t0 = performance.now();
+    const bpsBytes = BPS.generate(vanillaRomBytes, modified);
+    console.log('patch BPS:', bpsBytes.length, 'bytes en', (performance.now() - t0).toFixed(0), 'ms');
+    console.log('header BPS:', String.fromCharCode(...bpsBytes.slice(0, 4)));
+    console.groupEnd();
+    download(bpsBytes, (lastResult.filename || 'MinishRandomizer') + '.bps', 'application/octet-stream');
   });
 
-  document.getElementById('btnDlRom').addEventListener('click', () => {
+  document.getElementById('btnDlRom').addEventListener('click', async () => {
     if (!lastResult) return;
-    download(lastResult.patchedRom, (lastResult.filename || 'MinishRandomizer') + '.gba', 'application/octet-stream');
+    if (!await ensureRom()) { showError('ROM requis pour générer le ROM patché.'); return; }
+    const modified = applyWrites();
+    console.log('[rom] téléchargement .gba', modified.length, 'bytes');
+    download(modified, (lastResult.filename || 'MinishRandomizer') + '.gba', 'application/octet-stream');
   });
 
   document.getElementById('btnDlSpoiler').addEventListener('click', () => {

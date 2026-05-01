@@ -105,6 +105,26 @@ app.MapPost("/api/presets/apply", async (HttpRequest request) =>
     }
 });
 
+app.MapGet("/api/entity-triples", () =>
+{
+    var assembly = Assembly.GetAssembly(typeof(ShufflerController));
+    using var stream = assembly?.GetManifestResourceStream("RandomizerCore.Resources.default.logic");
+    if (stream is null) return Results.NotFound();
+    var content = new StreamReader(stream).ReadToEnd();
+    var matches = Regex.Matches(content, @"(0x[0-9a-fA-F]+)-(0x[0-9a-fA-F]+)-(0x[0-9a-fA-F]+)");
+    var triples = matches
+        .Select(m => new[]
+        {
+            Convert.ToInt32(m.Groups[1].Value, 16),
+            Convert.ToInt32(m.Groups[2].Value, 16),
+            Convert.ToInt32(m.Groups[3].Value, 16)
+        })
+        .GroupBy(t => (t[0] << 16) | (t[1] << 8) | t[2])
+        .Select(g => g.First())
+        .ToList();
+    return Results.Ok(triples);
+});
+
 app.MapPost("/api/randomize", async (HttpRequest request) =>
 {
     if (!request.HasFormContentType)
@@ -128,6 +148,24 @@ app.MapPost("/api/randomize", async (HttpRequest request) =>
         var controller = new ShufflerController();
         controller.LoadLogicFile();
         Rom.InitializeDummy();
+
+        var entityAddressesJson = form["entityAddresses"].ToString();
+        if (!string.IsNullOrWhiteSpace(entityAddressesJson))
+        {
+            try
+            {
+                var raw = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, int>>(entityAddressesJson);
+                if (raw != null)
+                {
+                    var map = new Dictionary<int, int>(raw.Count);
+                    foreach (var (k, v) in raw)
+                        if (int.TryParse(k, out var packed))
+                            map[packed] = v;
+                    Rom.Instance!.EntityAddressMap = map;
+                }
+            }
+            catch { /* malformed — will fail later at GetAddress() with a clear message */ }
+        }
 
         if (!string.IsNullOrWhiteSpace(settingString))
         {

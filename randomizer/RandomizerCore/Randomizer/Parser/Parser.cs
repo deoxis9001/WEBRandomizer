@@ -396,13 +396,24 @@ public class Parser
 
         if ((addressType & AddressType.GroundItem) == AddressType.GroundItem) throw new NotImplementedException();
 
-        // Look chest address up in table
-        var areaTableAddr = Rom.Instance!.Reader.ReadAddr(Rom.Instance.Headers.AreaMetadataBase + (area << 2));
-        var roomTableAddr = Rom.Instance.Reader.ReadAddr(areaTableAddr + (room << 2));
-        var chestTableAddr = Rom.Instance.Reader.ReadAddr(roomTableAddr + 0x0C);
+        if (Rom.Instance!.IsDummy)
+        {
+            var key = (area << 16) | (room << 8) | chest;
+            if (Rom.Instance.EntityAddressMap == null || !Rom.Instance.EntityAddressMap.TryGetValue(key, out addressValue))
+                throw new ParserException(
+                    $"Entity address {area:X}-{room:X}-{chest:X} not in pre-computed map. " +
+                    "Include entityAddresses in the /api/randomize request.");
+        }
+        else
+        {
+            // Look chest address up in table
+            var areaTableAddr = Rom.Instance.Reader.ReadAddr(Rom.Instance.Headers.AreaMetadataBase + (area << 2));
+            var roomTableAddr = Rom.Instance.Reader.ReadAddr(areaTableAddr + (room << 2));
+            var chestTableAddr = Rom.Instance.Reader.ReadAddr(roomTableAddr + 0x0C);
 
-        // Chests are 8 bytes long, and the item is stored 2 bytes in
-        addressValue = chestTableAddr + chest * 8 + 0x02;
+            // Chests are 8 bytes long, and the item is stored 2 bytes in
+            addressValue = chestTableAddr + chest * 8 + 0x02;
+        }
 
         return new LocationAddress(addressType, addressValue);
     }

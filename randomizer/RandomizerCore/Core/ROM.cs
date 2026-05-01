@@ -14,6 +14,10 @@ public class Rom
 
     public bool IsDummy { get; private set; }
 
+    /// Populated by the web server from the client's entityAddresses POST field
+    /// when running in zero-ROM (dummy) mode.  Key = (area << 16)|(room << 8)|chest.
+    public Dictionary<int, int>? EntityAddressMap { get; set; }
+
     public Rom(string filePath)
     {
         Path = filePath;
